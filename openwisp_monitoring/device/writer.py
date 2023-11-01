@@ -74,6 +74,11 @@ class DeviceDataWriter(object):
         for interface in data.get('interfaces', []):
             ifname = interface['name']
             extra_tags = Metric._sort_dict(device_extra_tags)
+            print("ifname " + ifname)
+            if 'wireless' == interface['type']:
+                self._write_wireless_signal(
+                    interface, ifname, ct, self.device_data.pk, current, time=time
+                )
             if 'mobile' in interface:
                 self._write_mobile_signal(
                     interface, ifname, ct, self.device_data.pk, current, time=time
@@ -265,6 +270,39 @@ class DeviceDataWriter(object):
         )
         if created:
             self._create_access_tech_chart(metric)
+
+    def _write_wireless_signal(self, interface, ifname, ct, pk, current=False, time=None):
+        data = interface['wireless']
+        channel = data['channel']
+        noise=data["noise"]
+        ssid=data["noise"]
+        country=data["country"]
+        tx_power=data["tx_power"]
+        signal_strength=data["signal"]
+        frequency=data["frequency"]
+
+        extra_values = {
+            'channel': int(channel),
+            'noise': float(noise),
+            'ssid': str(ssid),
+            'country': str(country),
+            'tx_power': float(tx_power),
+            'frequency': int(frequency),
+            'interface_name': str(ifname)
+            }
+        if signal_strength is not None:
+            metric, created = Metric._get_or_create(
+                object_id=self.device_data.pk,
+                content_type_id=ct.id,
+                configuration='signal_strength',
+                name='signal strength',
+                key='wireless',
+            )
+            self._append_metric_data(
+                metric, signal_strength, current, time=time, extra_values=extra_values
+            )
+            if created:
+                self._create_signal_strength_chart(metric)
 
     def _write_cpu(
         self, load, cpus, primary_key, content_type, current=False, time=None

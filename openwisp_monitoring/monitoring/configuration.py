@@ -464,7 +464,7 @@ DEFAULT_METRICS = {
         'name': '{name}',
         'key': '{key}',
         'field_name': 'signal_strength',
-        'related_fields': ['signal_power'],
+        'related_fields': ['signal_power','channel','noise','ssid','country','tx_power','frequency','interface_name'],
         'charts': {
             'signal_strength': {
                 'type': 'scatter',
