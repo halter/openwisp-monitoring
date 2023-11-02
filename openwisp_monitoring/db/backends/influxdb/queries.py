@@ -98,6 +98,13 @@ chart_query = {
             "object_id = '{object_id}' GROUP BY time(1d)"
         )
     },
+    'temperature': {
+        'influxdb': (
+            "SELECT MEAN(temperature) AS temperature FROM {key} WHERE "
+            "time >= '{time}' {end_date} AND content_type = '{content_type}' AND "
+            "object_id = '{object_id}' GROUP BY time(1d)"
+        )
+    },
     'bandwidth': {
         'influxdb': (
             "SELECT MEAN(sent_bps_tcp) / 1000000000 AS TCP, "

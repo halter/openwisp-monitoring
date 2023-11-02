@@ -465,7 +465,7 @@ DEFAULT_METRICS = {
         'name': '{name}',
         'key': '{key}',
         'field_name': 'signal_strength',
-        'related_fields': ['signal_power','channel','noise','ssid','country','tx_power','frequency','interface_name'],
+        'related_fields': ['signal_power','channel','noise','ssid','country','tx_power','frequency','interface_name','temperature'],
         'charts': {
             'signal_strength': {
                 'type': 'scatter',
@@ -543,6 +543,27 @@ DEFAULT_METRICS = {
                     'fixed_value': 100,
                 },
                 'query': chart_query['access_tech'],
+            }
+        },
+    },
+    'temperature': {
+        'label': _('Temperature'),
+        'name': 'Temperature',
+        'key': 'temperature',
+        'field_name': 'temperature',
+        'related_fields': ['sensor',],
+        'charts': {
+            'temperature': {
+                'type': 'scatter',
+                'title': _('Temperature'),
+                'description': _(
+                    'Device temperature as measured by specified sensor'
+                ),
+                'summary_labels': [_('Temperature')],
+                'unit': 'Celcius',
+                'colors': [DEFAULT_COLORS[-3]],
+                'order': 260,
+                'query': chart_query['temperature'],
             }
         },
     },

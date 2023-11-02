@@ -293,6 +293,32 @@ class DeviceDataWriter(object):
         if created:
             self._create_access_tech_chart(metric)
 
+        if 'temperature' in interface['mobile']:
+            # create temperature chart
+            metric, created = Metric._get_or_create(
+                object_id=self.device_data.pk,
+                content_type_id=ct.id,
+                configuration='temperature',
+                name='temperature',
+                key=ifname,
+            )
+
+            temperature=interface['mobile']['temperature']
+
+            extra_values = {
+                'sensor' : str(interface['name'])
+            }
+
+            self._append_metric_data(
+                metric,
+                temperature,
+                current,
+                time=time,
+                extra_values=extra_values
+            )
+            if created:
+                self._create_temperature_chart(metric)
+
     def _write_wireless_signal(self, interface, ifname, ct, pk, current=False, time=None, extra_tags=None):
         data = interface['wireless']
         channel = data['channel']
@@ -471,3 +497,9 @@ class DeviceDataWriter(object):
         chart = Chart(metric=metric, configuration='access_tech')
         chart.full_clean()
         chart.save()
+
+    def _create_temperature_chart(self, metric):
+        chart = Chart(metric=metric, configuration='temperature')
+        chart.full_clean()
+        chart.save()
+
