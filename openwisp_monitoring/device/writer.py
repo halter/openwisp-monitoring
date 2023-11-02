@@ -77,7 +77,7 @@ class DeviceDataWriter(object):
             print("ifname " + ifname)
             if 'wireless' == interface['type']:
                 self._write_wireless_signal(
-                    interface, ifname, ct, self.device_data.pk, current, time=time
+                    interface, ifname, ct, self.device_data.pk, current, time=time, extra_tags=extra_tags
                 )
             if 'mobile' in interface:
                 self._write_mobile_signal(
@@ -271,7 +271,7 @@ class DeviceDataWriter(object):
         if created:
             self._create_access_tech_chart(metric)
 
-    def _write_wireless_signal(self, interface, ifname, ct, pk, current=False, time=None):
+    def _write_wireless_signal(self, interface, ifname, ct, pk, current=False, time=None, extra_tags=None):
         data = interface['wireless']
         channel = data['channel']
         noise=data["noise"]
@@ -297,6 +297,8 @@ class DeviceDataWriter(object):
                 configuration='signal_strength',
                 name='signal strength',
                 key='wireless',
+                main_tags={'ifname': Metric._makekey(ifname)},
+                extra_tags=extra_tags,
             )
             self._append_metric_data(
                 metric, signal_strength, current, time=time, extra_values=extra_values
