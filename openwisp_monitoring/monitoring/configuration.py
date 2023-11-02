@@ -267,6 +267,7 @@ DEFAULT_METRICS = {
         'name': '{name}',
         'key': '{key}',
         'field_name': 'clients',
+        'related_fields': ['noise','ht','vht','signal','wmm','authorized','mfp','auth','vendor'],
         'charts': {
             'wifi_clients': {
                 'type': 'bar',

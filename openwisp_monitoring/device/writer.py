@@ -133,8 +133,30 @@ class DeviceDataWriter(object):
             for client in clients:
                 if 'mac' not in client:
                     continue
+
+                noise=client["noise"]
+                ht=client['ht']
+                vht=client['vht']
+                signal=client["signal"]
+                wmm=client['wmm']
+                authorized=client['authorized']
+                mfp=client['mfp']
+                auth=client['auth']
+                vendor=client['vendor']
+
+                extra_values = {
+                    'noise' : float(noise),
+                    'ht' : bool(ht),
+                    'vht' : bool(vht),
+                    'signal' : float(signal),
+                    'wmm' : bool(wmm),
+                    'authorized' : bool(authorized),
+                    'mfp' : bool(mfp),
+                    'auth' : bool(auth),
+                    'vendor' : str(vendor),
+                    }
                 self._append_metric_data(
-                    metric, client['mac'], current, time=client_time
+                    metric, client['mac'], current, time=client_time, extra_values=extra_values
                 )
                 client_time += timedelta(microseconds=1)
             if created:
@@ -275,7 +297,7 @@ class DeviceDataWriter(object):
         data = interface['wireless']
         channel = data['channel']
         noise=data["noise"]
-        ssid=data["noise"]
+        ssid=data["ssid"]
         country=data["country"]
         tx_power=data["tx_power"]
         signal_strength=data["signal"]
