@@ -548,10 +548,10 @@ DEFAULT_METRICS = {
     },
     'temperature': {
         'label': _('Temperature'),
-        'name': 'Temperature',
-        'key': 'temperature',
+        'name': '{name}',
+        'key': '{key}',
         'field_name': 'temperature',
-        'related_fields': ['sensor',],
+        'related_fields': ['sensor'],
         'charts': {
             'temperature': {
                 'type': 'scatter',
