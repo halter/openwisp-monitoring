@@ -222,7 +222,6 @@
                     map.setView(map.geoJSON.getBounds().getCenter(), 10);
                 } else {
                     map.fitBounds(map.geoJSON.getBounds());
-                    map.setZoom(map.getZoom() - 1);
                 }
                 map.geoJSON.eachLayer(function (layer) {
                     layer[layer.feature.geometry.type == 'Point' ? 'bringToFront' : 'bringToBack']();
@@ -237,8 +236,14 @@
                     let bounds = event.target.getBounds();
                     if (bounds._southWest.lng < -180 && !netjsonGraph.westWorldFeaturesAppended) {
                         let westWorldFeatures = window.structuredClone(netjsonGraph.data);
+                        // Exclude the features that may be added for the East world map
+                        westWorldFeatures.features = westWorldFeatures.features.filter(
+                            element => element.geometry.coordinates[0] <= 180
+                        );
                         westWorldFeatures.features.forEach(element => {
-                            element.geometry.coordinates[0] -= 360;
+                            if (element.geometry) {
+                                element.geometry.coordinates[0] -= 360;
+                            }
                         });
                         netjsonGraph.utils.appendData(westWorldFeatures, netjsonGraph);
                         netjsonGraph.westWorldFeaturesAppended = true;
@@ -246,8 +251,14 @@
                     }
                     if (bounds._northEast.lng > 180 && !netjsonGraph.eastWorldFeaturesAppended) {
                         let eastWorldFeatures = window.structuredClone(netjsonGraph.data);
+                        // Exclude the features that may be added for the West world map
+                        eastWorldFeatures.features = eastWorldFeatures.features.filter(
+                            element => element.geometry.coordinates[0] >= -180
+                        );
                         eastWorldFeatures.features.forEach(element => {
-                            element.geometry.coordinates[0] += 360;
+                            if (element.geometry) {
+                                element.geometry.coordinates[0] += 360;
+                            }
                         });
                         netjsonGraph.utils.appendData(eastWorldFeatures, netjsonGraph);
                         netjsonGraph.eastWorldFeaturesAppended = true;

@@ -12,7 +12,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.core.validators import MaxValueValidator
-from django.db import models
+from django.db import IntegrityError, models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from jsonfield import JSONField
@@ -25,7 +25,7 @@ from openwisp_monitoring.monitoring.utils import clean_timeseries_data_key
 from openwisp_utils.base import TimeStampedEditableModel
 
 from ...db import default_chart_query, timeseries_db
-from ...settings import CACHE_TIMEOUT
+from ...settings import CACHE_TIMEOUT, DEFAULT_CHART_TIME
 from ..configuration import (
     CHART_CONFIGURATION_CHOICES,
     DEFAULT_COLORS,
@@ -35,7 +35,7 @@ from ..configuration import (
 )
 from ..exceptions import InvalidChartConfigException, InvalidMetricConfigException
 from ..signals import pre_metric_write, threshold_crossed
-from ..tasks import delete_timeseries, timeseries_batch_write, timeseries_write
+from ..tasks import _timeseries_batch_write, _timeseries_write, delete_timeseries
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -179,10 +179,18 @@ class AbstractMetric(TimeStampedEditableModel):
                 metric.extra_tags = cls._sort_dict(metric.extra_tags)
                 metric.save()
         except cls.DoesNotExist:
-            metric = cls(**kwargs)
-            metric.full_clean()
-            metric.save()
-            created = True
+            try:
+                metric = cls(**kwargs)
+                metric.full_clean()
+                metric.save()
+                created = True
+            except IntegrityError:
+                # Potential race conditions may arise when multiple
+                # celery workers concurrently write data to InfluxDB.
+                # These simultaneous writes can result in the database
+                # processing transactions from another "metric.save()"
+                # call, potentially leading to IntegrityError exceptions.
+                return cls._get_or_create(**kwargs)
         return metric, created
 
     @classmethod
@@ -449,7 +457,7 @@ class AbstractMetric(TimeStampedEditableModel):
                     {'value': extra_values[self.alert_field]}
                 )
         if write:
-            timeseries_write(name=self.key, values=values, **options)
+            _timeseries_write(name=self.key, values=values, **options)
         return {'name': self.key, 'values': values, **options}
 
     @classmethod
@@ -461,7 +469,7 @@ class AbstractMetric(TimeStampedEditableModel):
                 write_data.append(metric.write(**kwargs, write=False))
             except ValueError as error:
                 error_dict[metric.key] = str(error)
-        timeseries_batch_write(write_data)
+        _timeseries_batch_write(write_data)
         if error_dict:
             raise ValueError(error_dict)
 
@@ -487,7 +495,7 @@ class AbstractChart(TimeStampedEditableModel):
         max_length=16, null=True, choices=CHART_CONFIGURATION_CHOICES
     )
     GROUP_MAP = {'1d': '10m', '3d': '20m', '7d': '1h', '30d': '24h', '365d': '7d'}
-    DEFAULT_TIME = '7d'
+    DEFAULT_TIME = DEFAULT_CHART_TIME
 
     class Meta:
         abstract = True
@@ -545,6 +553,10 @@ class AbstractChart(TimeStampedEditableModel):
         return self.config_dict.get('trace_order', [])
 
     @property
+    def trace_labels(self):
+        return self.config_dict.get('trace_labels', {})
+
+    @property
     def calculate_total(self):
         return self.config_dict.get('calculate_total', False)
 
@@ -592,6 +604,12 @@ class AbstractChart(TimeStampedEditableModel):
         if query:
             return query[timeseries_db.backend_name]
         return self._default_query
+
+    @property
+    def summary_query(self):
+        query = self.config_dict.get('summary_query', None)
+        if query:
+            return query[timeseries_db.backend_name]
 
     @property
     def top_fields(self):
@@ -651,10 +669,14 @@ class AbstractChart(TimeStampedEditableModel):
         additional_params=None,
     ):
         query = query or self.query
+        if summary and self.summary_query:
+            query = self.summary_query
         additional_params = additional_params or {}
         params = self._get_query_params(time, start_date, end_date)
         params.update(additional_params)
         params.update({'start_date': start_date, 'end_date': end_date})
+        if not params.get('organization_id') and self.config_dict.get('__all__', False):
+            params['organization_id'] = ['__all__']
         return timeseries_db.get_query(
             self.type,
             params,

@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.forms import generic_inlineformset_factory
 from django.core.cache import cache
+from django.db import connection
 from django.test import TestCase
 from django.urls import reverse
 from django.utils.timezone import datetime, now, timedelta
@@ -45,7 +46,7 @@ class TestAdmin(
     """
 
     resources_fields = TestImportExportMixin.resource_fields
-    resources_fields.append('monitoring__status')
+    resources_fields.append('monitoring_status')
     app_label = 'config'
     _device_params = {
         'group': '',
@@ -118,6 +119,22 @@ class TestAdmin(
         self.assertContains(response, "geoJsonUrl: \'http://testserver/api")
         self.assertContains(response, "locationDeviceUrl: \'http://testserver/api")
 
+    def test_wifisession_dashboard_chart_query(self):
+        url = reverse('admin:index')
+        with self.assertNumQueries(10):
+            response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        device_monitoring_app_label = WifiSession._meta.app_label
+        for query in connection.queries:
+            if query['sql'] == (
+                f'SELECT COUNT("{device_monitoring_app_label}_wifisession"."id") '
+                f'AS "active__count" FROM "{device_monitoring_app_label}_wifisession" '
+                f'WHERE "{device_monitoring_app_label}_wifisession"."stop_time" IS NULL'
+            ):
+                break
+        else:
+            self.fail('WiFiSession dashboard query not found')
+
     def test_status_data(self):
         d = self._create_device(organization=self._create_org())
         data = self._data()
@@ -142,6 +159,14 @@ class TestAdmin(
                 ],
             }
         )
+        data['interfaces'].append(deepcopy(data['interfaces'][0]))
+        data['interfaces'][2].update(
+            {
+                'name': 'wlan2',
+                'mac': '44:d1:fa:4b:38:45',
+            }
+        )
+        data['interfaces'][2]['wireless']['mode'] = 'station'
         self._post_data(d.id, d.key, data)
         url = reverse('admin:config_device_change', args=[d.pk])
         r = self.client.get(url)
@@ -153,6 +178,32 @@ class TestAdmin(
             self.assertContains(r, '44:D1:FA:4B:00:02')
         with self.subTest('Neighbor IP is shown'):
             self.assertContains(r, 'fe80::9683:c4ff:fe02:c2bf')
+        with self.subTest('Wireless client table header is shown'):
+            self.assertContains(
+                r,
+                '<th class="mac">\n\nAssociated client\n\nMAC address\n\n' '</th>',
+                html=True,
+                count=2,
+            )
+            self.assertContains(
+                r,
+                '<th class="mac">\n\nAccess Point\n\nMAC address\n\n' '</th>',
+                html=True,
+                count=1,
+            )
+        with self.subTest('Wireless interface properties are shown'):
+            self.assertContains(
+                r,
+                '<div class="form-row">\n<label>Quality:</label>\n'
+                '<div class="readonly">\n65 / 70\n</div>\n</div>',
+                html=True,
+            )
+            self.assertContains(
+                r,
+                '<div class="form-row">\n<label>Bitrate:</label>\n'
+                '<div class="readonly">\n1.1 MBits/s\n</div>\n</div>',
+                html=True,
+            )
 
     def test_status_data_contains_wifi_version(self):
         data = self._data()
@@ -269,6 +320,25 @@ class TestAdmin(
         self.assertContains(r, '<h2>Configuration</h2>')
         self.assertContains(r, '<h2>Map</h2>')
         self.assertContains(r, '<h2>Credentials</h2>')
+
+    def test_device_disabled_organization_admin(self):
+        self.create_test_data()
+        device = Device.objects.first()
+        Check.objects.create(
+            name='Ping check',
+            check_type=CHECK_CLASSES[0][0],
+            content_object=device,
+            params={},
+        )
+        org = device.organization
+        org.is_active = False
+        org.save()
+        url = reverse('admin:config_device_change', args=[device.pk])
+        response = self.client.get(url)
+        self.assertContains(response, '<h2>Status</h2>')
+        self.assertContains(response, '<h2>Charts</h2>')
+        self.assertNotContains(response, '<h2>Checks</h2>')
+        self.assertNotContains(response, '<h2>AlertSettings</h2>')
 
     def test_remove_invalid_interface(self):
         d = self._create_device(organization=self._create_org())
@@ -1055,7 +1125,7 @@ class TestWifiSessionAdmin(
             response,
             (
                 '<label>Stop time:</label>\n\n'
-                '<div class="readonly">Aug. 24, 2023, 5:46 p.m.</div>'
+                '<div class="readonly">Aug. 24, 2023, 7:46 p.m.</div>'
             ),
             html=True,
         )

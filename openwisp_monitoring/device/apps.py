@@ -3,7 +3,7 @@ from urllib.parse import urljoin
 from django.apps import AppConfig
 from django.conf import settings
 from django.core.cache import cache
-from django.db.models import Case, Count, Sum, When
+from django.db.models import Count
 from django.db.models.signals import post_delete, post_save
 from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
@@ -44,11 +44,30 @@ class DeviceMonitoringConfig(AppConfig):
         self.connect_config_status_changed()
         self.connect_wifi_client_signals()
         self.connect_offline_device_close_wifisession()
+        self.connect_check_signals()
         self.device_recovery_detection()
         self.set_update_config_model()
         self.register_dashboard_items()
         self.register_menu_groups()
         self.add_connection_ignore_notification_reasons()
+
+    def connect_check_signals(self):
+        from django.db.models.signals import post_delete, post_save
+        from swapper import load_model
+
+        Check = load_model('check', 'Check')
+        DeviceMonitoring = load_model('device_monitoring', 'DeviceMonitoring')
+
+        post_save.connect(
+            DeviceMonitoring.handle_critical_metric,
+            sender=Check,
+            dispatch_uid='check_post_save_receiver',
+        )
+        post_delete.connect(
+            DeviceMonitoring.handle_critical_metric,
+            sender=Check,
+            dispatch_uid='check_post_delete_receiver',
+        )
 
     def connect_device_signals(self):
         from .api.views import DeviceMetricView
@@ -58,6 +77,7 @@ class DeviceMonitoringConfig(AppConfig):
         DeviceLocation = load_model('geo', 'DeviceLocation')
         Metric = load_model('monitoring', 'Metric')
         Chart = load_model('monitoring', 'Chart')
+        Organization = load_model('openwisp_users', 'Organization')
 
         post_save.connect(
             self.device_post_save_receiver,
@@ -120,6 +140,11 @@ class DeviceMonitoringConfig(AppConfig):
             sender=DeviceLocation,
             dispatch_uid='post_delete_devicelocation_invalidate_devicedata_cache',
         )
+        post_save.connect(
+            self.organization_post_save_receiver,
+            sender=Organization,
+            dispatch_uid='post_save_organization_disabled_monitoring',
+        )
 
     @classmethod
     def device_post_save_receiver(cls, instance, created, **kwargs):
@@ -133,6 +158,13 @@ class DeviceMonitoringConfig(AppConfig):
         instance.__class__ = DeviceData
         instance.checks.all().delete()
         instance.metrics.all().delete()
+
+    @classmethod
+    def organization_post_save_receiver(cls, instance, *args, **kwargs):
+        if instance.is_active is False:
+            from .tasks import handle_disabled_organization
+
+            handle_disabled_organization.delay(str(instance.id))
 
     def device_recovery_detection(self):
         if not app_settings.DEVICE_RECOVERY_DETECTION:
@@ -350,30 +382,21 @@ class DeviceMonitoringConfig(AppConfig):
                     'query_params': {
                         'app_label': WifiSession._meta.app_label,
                         'model': WifiSession._meta.model_name,
-                        'annotate': {
-                            'active': Count(
-                                Case(
-                                    When(
-                                        stop_time__isnull=True,
-                                        then=1,
-                                    )
-                                )
-                            ),
-                        },
+                        'filter': {'stop_time__isnull': True},
                         'aggregate': {
-                            'active__sum': Sum('active'),
+                            'active__count': Count('id'),
                         },
                         'organization_field': 'device__organization_id',
                     },
                     'filters': {
                         'key': 'stop_time__isnull',
-                        'active__sum': 'true',
+                        'active__count': 'true',
                     },
                     'colors': {
-                        'active__sum': '#267126',
+                        'active__count': '#267126',
                     },
                     'labels': {
-                        'active__sum': _('Currently Active WiFi Sessions'),
+                        'active__count': _('Currently Active WiFi Sessions'),
                     },
                     'quick_link': {
                         'url': reverse_lazy(
@@ -411,8 +434,11 @@ class DeviceMonitoringConfig(AppConfig):
                     'monitoring/css/percircle.min.css',
                     'monitoring/css/chart.css',
                     'monitoring/css/dashboard-chart.css',
+                    'admin/css/vendor/select2/select2.min.css',
+                    'admin/css/autocomplete.css',
                 ),
                 'js': (
+                    'admin/js/vendor/select2/select2.full.min.js',
                     'monitoring/js/lib/moment.min.js',
                     'monitoring/js/lib/daterangepicker.min.js',
                     'monitoring/js/lib/percircle.min.js',

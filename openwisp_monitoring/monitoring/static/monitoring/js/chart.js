@@ -162,7 +162,7 @@
                     total[j] += data.traces[i][1][j];
                 }
             }
-            data.traces.push(["total", total]);
+            data.traces.push(['total', total]);
             data.summary.total = Object.values(data.summary).reduce(function (a, b) {
                 return a + b;
             }, 0);
@@ -170,7 +170,9 @@
         // loop over traces to put them on the chart
         for (var i=0; i<data.traces.length; i++) {
             key = data.traces[i][0];
-            label = data.traces[i][0].replace(/_/g, ' ');
+            // label for the trace, use trace_labels if available, otherwise
+            // replace underscores with spaces in the key name
+            label = data.trace_labels && data.trace_labels[data.traces[i][0]] || data.traces[i][0].replace(/_/g, ' ');
 
             if (data.summary_labels){
                 if (data.trace_order) {

@@ -191,8 +191,15 @@ django.jQuery(function ($) {
           const now = moment().format('YYYY-MM-DD HH:mm:ss');
           const endDateTime = moment(endDate).format('YYYY-MM-DD HH:mm:ss');
           endDate = endDateTime > now ? now : endDateTime;
+          url = `${apiUrl}?start=${startDate}&end=${endDate}`;
           var timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-          url = `${apiUrl}?timezone=${timezone}&start=${startDate}&end=${endDate}`;
+          if (timezone) {
+            url = `${url}&timezone=${timezone}`;
+          }
+        }
+        if ($('#org-selector').val()) {
+          var orgSlug = $('#org-selector').val();
+          url = `${url}&organization_slug=${orgSlug}`;
         }
         return url;
       },
@@ -209,6 +216,22 @@ django.jQuery(function ($) {
           }
           createChart(chart, data.x, htmlId, chart.title, chart.type, chartQuickLink);
         });
+      },
+      addOrganizationSelector = function (data) {
+        var orgSelector = $('#org-selector');
+        if (data.organizations === undefined) {
+          return;
+        }
+        if (orgSelector.data('select2-id') === 'org-selector') {
+          return;
+        }
+        orgSelector.parent().show();
+        orgSelector.select2({
+          data: data.organizations,
+          allowClear: true,
+          placeholder: gettext('Organization Filter')
+        });
+        orgSelector.show();
       },
       loadCharts = function (time, showLoading) {
         $.ajax(getChartFetchUrl(time), {
@@ -230,9 +253,16 @@ django.jQuery(function ($) {
               fallback.show();
             }
             createCharts(data);
+            addOrganizationSelector(data);
           },
-          error: function () {
-            alert('Something went wrong while loading the charts');
+          error: function (response) {
+            var errorMessage = gettext('Something went wrong while loading the charts');
+            if (response.responseJSON) {
+              if (response.responseJSON.constructor === Array) {
+                errorMessage = errorMessage + ': ' + response.responseJSON.join(' ');
+              }
+            }
+            alert(errorMessage);
           },
           complete: function () {
             triggerZoomCharts('js-plotly-plot');
@@ -255,7 +285,7 @@ django.jQuery(function ($) {
       var range = localStorage.getItem(timeRangeKey) || defaultTimeRange;
       var startLabel = localStorage.getItem(startDayKey) || moment().format('MMMM D, YYYY');
       var endLabel = localStorage.getItem(endDayKey) || moment().format('MMMM D, YYYY');
-      
+
       // Disable the zoom chart and scrolling when we refresh the page
       localStorage.setItem(isChartZoomScroll, false);
       localStorage.setItem(isChartZoomed, false);
@@ -271,7 +301,6 @@ django.jQuery(function ($) {
         // Then loads charts with custom ranges selected
         loadCharts(range, true);
       }
-
       else {
         endLabel =  moment().format('MMMM D, YYYY');
         startLabel = moment().subtract(range.split('d')[0], 'days').format('MMMM D, YYYY');
@@ -284,7 +313,9 @@ django.jQuery(function ($) {
     // try adding the browser timezone to the querystring
     try {
       var timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      baseUrl = baseUrl.replace('time=', 'timezone=' + timezone + '&time=');
+      if (timezone) {
+        baseUrl = baseUrl.replace('time=', 'timezone=' + timezone + '&time=');
+      }
       // ignore failures (older browsers do not support this)
     } catch (e) {}
 
@@ -313,21 +344,31 @@ django.jQuery(function ($) {
       );
     });
     // bind export button
-    $('#ow-chart-time a.export').click(function () {
-      var time = localStorage.getItem(timeRangeKey);
-      location.href = baseUrl + time + '&csv=1';
+    $('#ow-chart-export').click(function () {
+      var queryString,
+        queryParams = {'csv': 1};
+        queryParams.time = localStorage.getItem(timeRangeKey);
       // If custom or pickerChosenLabelKey is 'Custom Range', pass pickerEndDate and pickerStartDate to csv url
       if (localStorage.getItem(isCustomDateRange) === 'true' || localStorage.getItem(pickerChosenLabelKey) === customDateRangeLabel) {
-      var startDate = localStorage.getItem(startDateTimeKey);
-      var endDate = localStorage.getItem(endDateTimeKey);
-      if (localStorage.getItem(isChartZoomed) === 'true') {
-        time = localStorage.getItem(zoomtimeRangeKey);
-        endDate = localStorage.getItem(zoomEndDateTimeKey);
-        startDate = localStorage.getItem(zoomStartDateTimeKey);
+        queryParams.start = localStorage.getItem(startDateTimeKey);
+        queryParams.end = localStorage.getItem(endDateTimeKey);
+        if (localStorage.getItem(isChartZoomed) === 'true') {
+          queryParams.time = localStorage.getItem(zoomtimeRangeKey);
+          queryParams.end = localStorage.getItem(zoomEndDateTimeKey);
+          queryParams.start = localStorage.getItem(zoomStartDateTimeKey);
+        }
+        timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (timezone) {
+          queryParams.timezone = timezone;
+        }
       }
-      var timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      location.href = `${apiUrl}?timezone=${timezone}&start=${startDate}&end=${endDate}&csv=1`;
+      if ($('#org-selector').val()) {
+        queryParams.organization_slug = $('#org-selector').val();
       }
+      queryString = Object.keys(queryParams)
+        .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(queryParams[key])}`)
+        .join('&');
+      location.href = `${apiUrl}?${queryString}`;
     });
     // fetch chart data and replace the old charts with the new ones
     function loadFetchedCharts(time){
@@ -344,5 +385,12 @@ django.jQuery(function ($) {
         },
       });
     }
+
+    $('#org-selector').change(function(){
+      loadCharts(
+        localStorage.getItem(timeRangeKey) || defaultTimeRange,
+        true
+      );
+    });
   });
 }(django.jQuery));

@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from copy import deepcopy
 
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.translation import gettext_lazy as _
@@ -57,19 +58,19 @@ DEFAULT_METRICS = {
         'charts': {
             'uptime': {
                 'type': 'bar',
-                'title': _('Uptime'),
+                'title': _('Ping Success Rate'),
                 'description': _(
                     'A value of 100% means reachable, 0% means unreachable, values in '
                     'between 0% and 100% indicate the average reachability in the '
                     'period observed. Obtained with the fping linux program.'
                 ),
-                'summary_labels': [_('Average uptime')],
+                'summary_labels': [_('Average Ping Success Rate')],
                 'unit': '%',
                 'order': 200,
                 'colorscale': {
                     'max': 100,
                     'min': 0,
-                    'label': _('Reachable'),
+                    'label': _('Rate'),
                     'scale': [
                         [0, '#c13000'],
                         [0.1, '#ec7204'],
@@ -78,7 +79,7 @@ DEFAULT_METRICS = {
                         [1, '#7db201'],
                     ],
                     'map': [
-                        [100, '#7db201', _('Reachable')],
+                        [100, '#7db201', _('Flawless')],
                         [90, '#90d000', _('Mostly Reachable')],
                         [50, '#deed0e', _('Partly Reachable')],
                         [10, '#ec7204', _('Mostly Unreachable')],
@@ -735,7 +736,19 @@ def unregister_metric_notifications(metric_name):
 
 
 def get_metric_configuration():
-    metrics = deep_merge_dicts(DEFAULT_METRICS, app_settings.ADDITIONAL_METRICS)
+    additional_metrics = deepcopy(app_settings.ADDITIONAL_METRICS)
+    for metric_name in list(additional_metrics.keys()):
+        if additional_metrics[metric_name].get('partial', False):
+            # A partial configuration can be defined in the settings.py
+            # with OPENWISP_MONITORING_METRICS setting to override
+            # metrics that are added with register_metric method in
+            # other django apps.
+            # Since, the partial configuration could be defined to
+            # override limited fields in the configuration, hence
+            # we don't validate the configuration here. Instead.
+            # configuration is validated in the register_metric method.
+            del additional_metrics[metric_name]
+    metrics = deep_merge_dicts(DEFAULT_METRICS, additional_metrics)
     # ensure configuration is not broken
     for metric_config in metrics.values():
         _validate_metric_configuration(metric_config)
@@ -763,6 +776,17 @@ def register_metric(metric_name, metric_config):
         raise ImproperlyConfigured(
             f'{metric_name} is an already registered Metric Configuration.'
         )
+    if metric_name in app_settings.ADDITIONAL_METRICS:
+        # There is partial configuration present for this "metric_name" in
+        # ADDITIONAL_METRICS. We need to merge the partial configuration with
+        # the registered metric before validating. Otherwise, users won't be
+        # able to override registered metrics using OPENWISP_MONITORING_METRICS
+        # setting.
+        metric_config = deep_merge_dicts(
+            metric_config,
+            app_settings.ADDITIONAL_METRICS[metric_name],
+        )
+        metric_config.pop('partial', None)
     _validate_metric_configuration(metric_config)
     for chart in metric_config.get('charts', {}).values():
         _validate_chart_configuration(chart_config=chart)

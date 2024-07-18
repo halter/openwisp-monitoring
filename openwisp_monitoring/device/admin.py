@@ -8,6 +8,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.forms import ModelForm
 from django.templatetags.static import static
 from django.urls import resolve, reverse
+from django.utils import timezone
 from django.utils.formats import localize
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
@@ -21,14 +22,13 @@ from nested_admin.nested import (
 from swapper import load_model
 
 from openwisp_controller.config.admin import DeviceAdmin as BaseDeviceAdmin
-from openwisp_controller.config.admin import DeviceResource as BaseDeviceResource
 from openwisp_users.multitenancy import MultitenantAdminMixin
 from openwisp_utils.admin import ReadOnlyAdmin
 
 from ..monitoring.admin import MetricAdmin
 from ..settings import MONITORING_API_BASEURL, MONITORING_API_URLCONF
 from . import settings as app_settings
-from .exportable import _exportable_fields
+from .exportable import DeviceMonitoringResource
 from .filters import DeviceFilter, DeviceGroupFilter, DeviceOrganizationFilter
 
 DeviceData = load_model('device_monitoring', 'DeviceData')
@@ -324,21 +324,14 @@ class DeviceAdmin(BaseDeviceAdmin, NestedModelAdmin):
         for inline in inlines:
             if not hasattr(inline, 'sortable_options'):
                 inline.sortable_options = {'disabled': True}
-        if not obj or obj._state.adding:
+        if not obj or obj._state.adding or obj.organization.is_active is False:
             inlines.remove(CheckInline)
             inlines.remove(MetricInline)
         return inlines
 
 
-class DeviceResource(BaseDeviceResource):
-    class Meta:
-        model = Device
-        fields = _exportable_fields
-        export_order = fields
-
-
 class DeviceAdminExportable(ImportExportMixin, DeviceAdmin):
-    resource_class = DeviceResource
+    resource_class = DeviceMonitoringResource
     # Added to support both reversion and import-export
     change_list_template = 'admin/config/change_list_device.html'
 
@@ -386,7 +379,7 @@ class WifiSessionAdminHelperMixin:
     def get_stop_time(self, obj):
         if obj.stop_time is None:
             return mark_safe('<strong style="color:green;">online</strong>')
-        return localize(obj.stop_time)
+        return localize(timezone.localtime(obj.stop_time))
 
     get_stop_time.short_description = _('stop time')
 

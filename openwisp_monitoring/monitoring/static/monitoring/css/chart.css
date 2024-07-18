@@ -1,47 +1,45 @@
 #ow-chart-fallback {
   text-align: center;
 }
-#ow-chart-time{
-  margin-top: 15px;
-  text-align: center;
-  padding: 4px;
+#ow-chart-utils {
+  display: flex;
+  justify-content: space-between;
 }
-#ow-chart-time a{
-  display: inline-block;
-  margin: 0 2px;
-  color: #fff;
-  background-color: #333;
-  padding: 5px 15px;
-  text-decoration: none !important;
-  border-radius: 3px;
-  cursor: pointer;
+#ow-chart-utils .select2-container {
+  min-width: 150px !important;
+  width: unset !important;
 }
-#ow-chart-time a:hover{
-  background-color: #777 !important;
+#ow-chart-utils span.select2-selection {
+  min-height: 27px;
+  min-width: 200px;
+  height: 27px;
 }
-#ow-chart-time a.active{
-  background: transparent;
-  color: #666;
-  cursor: default;
-  border: 1px solid #666;
+#ow-chart-utils .select2-selection__rendered {
+  line-height: 27px;
+  height: 27px;
 }
-#ow-chart-time a.export{
-  float: right;
-  background: #333;
+#ow-chart-utils .select2-selection__arrow {
+  top: 0;
+  height: 27px;
 }
-#ow-chart-time a#daterangepicker-widget{
-  float: left;
-  margin-right: 100px;
+#ow-chart-utils>span {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
 }
-#ow-chart-time a.export:hover{
-  background: #777;
+#ow-chart-utils .button {
+  font-size: 14px;
+  padding: 5px 10px;
 }
-#ow-chart-fallback{
+#ow-chart-export {
+  margin-left: 10px;
+}
+#ow-chart-fallback {
   display: none;
   border: 0 none;
 }
 #ow-chart-contents > div {
-  position: relative
+  position: relative;
 }
 .chart-help {
   display: inline-block;
@@ -61,7 +59,7 @@
   text-align: center;
   font-size: 1.22em;
   font-weight: normal;
-  color: #434B62;
+  color: #434b62;
 }
 .ow-chart {
   margin-top: 1.5em;
@@ -69,7 +67,7 @@
   border-top: 1px dotted rgba(0, 0, 0, 0.2);
   text-align: center;
 }
-.ow-chart:first-child{
+.ow-chart:first-child {
   border: 0 none;
   padding-top: 0;
   margin-top: 2.25em;
@@ -110,13 +108,13 @@
   margin-right: 2px;
 }
 #ow-chart-contents .circle > span {
-  font-size: .15em;
+  font-size: 0.15em;
   word-spacing: -0.75px;
   color: rgba(0, 0, 0, 0.6) !important;
   font-size: 13px;
   font-weight: bold;
 }
-#ow-chart-contents b{
+#ow-chart-contents b {
   background-color: #000 !important;
 }
 .chart-heading {
@@ -125,7 +123,7 @@
   text-align: center;
   font-size: 1.22em;
   font-weight: normal;
-  color: #434B62;
+  color: #434b62;
 }
 #chart-loading-overlay {
   width: 100%;
@@ -145,5 +143,14 @@
   transform: translate(-50%, -50%);
   text-align: center;
   display: none;
-  font-size: 1.2em
+  font-size: 1.2em;
+}
+@media (max-width: 768px) {
+  #ow-chart-utils {
+    display: block;
+  }
+  #ow-chart-utils > span + span {
+    margin: 5px 0px;
+    justify-content: end;
+  }
 }

@@ -9,6 +9,7 @@ from dateutil.relativedelta import relativedelta
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.signals import post_delete
 from django.dispatch import receiver
 from django.utils.timezone import now
 from django.utils.translation import gettext_lazy as _
@@ -21,11 +22,12 @@ from pytz import timezone as tz
 from swapper import load_model
 
 from openwisp_controller.config.validators import mac_address_validator
+from openwisp_monitoring.device.settings import get_critical_device_metrics
 from openwisp_utils.base import TimeStampedEditableModel
 
 from ...db import device_data_query, timeseries_db
 from ...monitoring.signals import threshold_crossed
-from ...monitoring.tasks import timeseries_write
+from ...monitoring.tasks import _timeseries_write
 from ...settings import CACHE_TIMEOUT
 from .. import settings as app_settings
 from .. import tasks
@@ -233,6 +235,11 @@ class AbstractDeviceData(object):
                             client['he'] = None
                     elif vht_enabled and client.get('he') is False:
                         client['he'] = None
+            # Convert bitrate from KBits/s to MBits/s
+            if wireless and 'bitrate' in wireless:
+                interface['wireless']['bitrate'] = round(
+                    interface['wireless']['bitrate'] / 1000.0, 1
+                )
             # add mac vendor to wireless clients if present
             if (
                 not mac_detection
@@ -270,7 +277,7 @@ class AbstractDeviceData(object):
         self._transform_data()
         time = time or now()
         options = dict(tags={'pk': self.pk}, timestamp=time, retention_policy=SHORT_RP)
-        timeseries_write(name=self.__key, values={'data': self.json()}, **options)
+        _timeseries_write(name=self.__key, values={'data': self.json()}, **options)
         cache_key = get_device_cache_key(device=self, context='current-data')
         # cache current data to allow getting it without querying the timeseries DB
         cache.set(
@@ -429,6 +436,40 @@ class AbstractDeviceMonitoring(TimeStampedEditableModel):
             ):
                 return True
         return False
+
+    @classmethod
+    def handle_disabled_organization(cls, organization_id):
+        """
+        Clears the management IP of all devices belonging to a
+        disabled organization and set their monitoring status to 'unknown'.
+
+        Parameters:
+            organization_id (int): The ID of the disabled organization.
+
+        Returns:
+            None
+        """
+        load_model('config', 'Device').objects.filter(
+            organization_id=organization_id
+        ).update(management_ip='')
+        cls.objects.filter(device__organization_id=organization_id).update(
+            status='unknown'
+        )
+
+    @classmethod
+    def _get_critical_metric_keys(cls):
+        return [metric['key'] for metric in get_critical_device_metrics()]
+
+    @classmethod
+    def handle_critical_metric(cls, instance, **kwargs):
+        critical_metrics = cls._get_critical_metric_keys()
+        if instance.check_type in critical_metrics:
+            try:
+                device_monitoring = cls.objects.get(device=instance.content_object)
+                if not instance.is_active or kwargs.get('signal') == post_delete:
+                    device_monitoring.update_status('unknown')
+            except cls.DoesNotExist:
+                pass
 
 
 class AbstractWifiClient(TimeStampedEditableModel):
