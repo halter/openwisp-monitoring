@@ -71,6 +71,10 @@ class DeviceDataWriter(object):
         self.write_device_metrics = []
         for interface in data.get("interfaces", []):
             ifname = interface["name"]
+            if 'wireless' == interface['type']:
+                self._write_wireless_signal(
+                    interface, ifname, ct, self.device_data.pk, current, time=time, extra_tags=device_extra_tags
+                )
             if "mobile" in interface:
                 self._write_mobile_signal(
                     interface, ifname, ct, self.device_data.pk, current, time=time
@@ -125,8 +129,49 @@ class DeviceDataWriter(object):
             for client in clients:
                 if "mac" not in client:
                     continue
+
+                noise=0
+                ht=False
+                vht=False
+                signal=0
+                wmm=False
+                authorized=False
+                mfp=False
+                auth=False
+                vendor=""
+
+                if "noise" in client:
+                    noise=client["noise"]
+                if "ht" in client:
+                    ht=client['ht']
+                if "vht" in client:
+                    vht=client['vht']
+                if "signal" in client:
+                    signal=client["signal"]
+                if "wmm" in client:
+                    wmm=client['wmm']
+                if "authorized" in client:
+                    authorized=client['authorized']
+                if "mfp" in client:
+                    mfp=client['mfp']
+                if "auth" in client:
+                    auth=client['auth']
+                if "vendor" in client:
+                    vendor=client['vendor']
+
+                extra_values = {
+                    'noise' : float(noise),
+                    'ht' : bool(ht),
+                    'vht' : bool(vht),
+                    'signal' : float(signal),
+                    'wmm' : bool(wmm),
+                    'authorized' : bool(authorized),
+                    'mfp' : bool(mfp),
+                    'auth' : bool(auth),
+                    'vendor' : str(vendor),
+                    }
                 self._append_metric_data(
-                    metric, client["mac"], current, time=client_time
+                    metric, client["mac"], current, time=client_time, extra_values=extra_values
                 )
                 client_time += timedelta(microseconds=1)
             if created:
@@ -265,6 +310,79 @@ class DeviceDataWriter(object):
         )
         if created:
             self._create_access_tech_chart(metric)
+
+        if 'temperature' in interface['mobile']:
+            # create temperature chart
+            metric, created = Metric._get_or_create(
+                object_id=self.device_data.pk,
+                content_type_id=ct.id,
+                configuration='temperature',
+                name='temperature',
+                key='temperature',
+            )
+
+            temperature=interface['mobile']['temperature']
+
+            extra_values = {
+                'sensor' : str(interface['name'])
+            }
+
+            self._append_metric_data(
+                metric,
+                temperature,
+                current,
+                time=time,
+                extra_values=extra_values
+            )
+
+    def _write_wireless_signal(self, interface, ifname, ct, pk, current=False, time=None, extra_tags=None):
+
+        data = interface['wireless']
+        channel = None
+        noise = 0
+        ssid = ""
+        country = ""
+        tx_power = 0
+        signal_strength = None
+        frequency = 0
+
+        if "channel" in data:
+            channel = data['channel']
+        if "noise" in data:
+            noise=data["noise"]
+        if "ssid" in data:
+            ssid=data["ssid"]
+        if "country" in data:
+            country=data["country"]
+        if "tx_power" in data:
+            tx_power=data["tx_power"]
+        if "signal" in data:
+            signal_strength=data["signal"]
+        if "frequency" in data:
+            frequency=data["frequency"]
+
+        extra_values = {
+            'channel': int(channel),
+            'noise': float(noise),
+            'ssid': str(ssid),
+            'country': str(country),
+            'tx_power': float(tx_power),
+            'frequency': int(frequency),
+            'interface_name': str(ifname)
+            }
+        if signal_strength is not None:
+            metric, created = Metric._get_or_create(
+                object_id=self.device_data.pk,
+                content_type_id=ct.id,
+                configuration='signal_strength',
+                name='signal strength',
+                key='wireless',
+                main_tags={'ifname': Metric._makekey(ifname)},
+                extra_tags=extra_tags,
+            )
+            self._append_metric_data(
+                metric, signal_strength, current, time=time, extra_values=extra_values
+            )
 
     def _write_cpu(
         self, load, cpus, primary_key, content_type, current=False, time=None

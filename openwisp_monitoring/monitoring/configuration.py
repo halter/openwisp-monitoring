@@ -268,6 +268,7 @@ DEFAULT_METRICS = {
         "name": "{name}",
         "key": "{key}",
         "field_name": "clients",
+        'related_fields': ['noise','ht','vht','signal','wmm','authorized','mfp','auth','vendor'],
         "charts": {
             "wifi_clients": {
                 "type": "bar",
@@ -566,7 +567,7 @@ DEFAULT_METRICS = {
         "name": "{name}",
         "key": "{key}",
         "field_name": "signal_strength",
-        "related_fields": ["signal_power"],
+        'related_fields': ['signal_power','channel','noise','ssid','country','tx_power','frequency','interface_name','temperature'],
         "charts": {
             "signal_strength": {
                 "type": "scatter",
